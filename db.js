@@ -85,6 +85,22 @@ var findInvoiceAndPayments = function(invoiceId, cb) {
   });
 };
 
+var findMatchingMetadataId = function(metadataId, cb) {
+  baronDb.view(dbName, 'invoiceMetadataId', { key:metadataId }, function(err, body) {
+    if (!err && body.rows && body.rows.length > 0) {
+      var matchingInvoice = body.rows[0].value;
+      //console.log('findMatchingMetadataId: ' + require('util').inspect(matchingInvoice));
+      var result = {
+        ok: true,
+        _id: matchingInvoice._id,
+        _rev: matchingInvoice._rev
+      };
+      return cb(err, result);
+    }
+  return cb(err, null);
+  }); 
+}
+
 var findPaymentById = function(paymentId, cb) {
   baronDb.view(dbName, 'paymentsById', { key:paymentId }, function(err, body) {
     if (!err && body.rows && body.rows.length > 0) {
@@ -181,6 +197,23 @@ var getLastKnownBlockHash = function(cb) {
 
 var createInvoice = function(invoice, cb) {
   if (validate.invoice(invoice)) {
+    // If metadata.id already known in database, return existing invoice instead of creating a new one.
+    // This is typically used by stateless apps who lack tracking of Invoice ID's.
+    if (invoice.metadata && invoice.metadata.id) {
+      findMatchingMetadataId(invoice.metadata.id, function(err, result) {
+        if (err) {
+          return cb(err, null);
+        }
+        else {
+          if (result) {
+            console.log('createInvoice found match:' + require('util').inspect(result));
+            return cb(undefined, result); 
+          }
+        }
+      });
+    }
+
+    // Proceed with Creation of Invoice
     invoice.access_token = undefined;
     invoice.created = new Date().getTime();
     invoice.type = 'invoice';

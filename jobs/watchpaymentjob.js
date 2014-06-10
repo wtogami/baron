@@ -3,6 +3,7 @@ var helper = require(__dirname + '/../helper');
 var db = require(__dirname + '/../db');
 var paymentUtil = require(__dirname + '/../paymentutil');
 var bitcoinUtil = require(__dirname + '/../bitcoinutil');
+var async = require('async');
 
 // TODO: This job can be removed in the future, we can calculate
 // The confirmations of our watched payments based on our stored
@@ -65,10 +66,17 @@ var watchPaymentsJob = function () {
 };
 
 var runWatchPaymentsJob = function () {
-  setInterval(function(){
-    watchPaymentsJob();
-  }, config.updateWatchListInterval);
-};
+  // Periodically update confirmations on all watched transactions
+  async.whilst(
+    function() { return true; },
+    function(cb) {
+      setTimeout(function() { watchPaymentsJob(); cb(); }, config.updateWatchListInterval);
+    },
+    function(err) {
+      console.log(err);
+    }
+  );
+}
 
 module.exports = {
   runWatchPaymentsJob:runWatchPaymentsJob,

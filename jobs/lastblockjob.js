@@ -107,10 +107,17 @@ var lastBlockJob = function() {
 };
 
 var runLastBlockJob = function () {
-  setInterval(function(){
-    lastBlockJob();
-  }, config.lastBlockJobInterval);
-};
+  // Periodically process new block
+  async.whilst(
+    function() { return true; },
+    function(cb) {
+      setTimeout(function() { lastBlockJob(); cb(); }, config.lastBlockJobInterval);
+    },
+    function(err) {
+      console.log(err);
+    }
+  );
+}
 
 module.exports = {
   runLastBlockJob: runLastBlockJob,

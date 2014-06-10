@@ -21,10 +21,17 @@ function webhooksJob() {
 }
 
 var runWebhooksJob = function () {
-  setInterval(function(){
-    webhooksJob();
-  }, config.webhooksJobInterval);
-};
+  // Periodically retry previously failed webhooks
+  async.whilst(
+    function() { return true; },
+    function(cb) {
+      setTimeout(function() { webhooksJob(); cb(); }, config.webhooksJobInterval);
+    },
+    function(err) {
+      console.log(err);
+    }
+  );
+}
 
 module.exports = {
   runWebhooksJob: runWebhooksJob

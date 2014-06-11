@@ -27,7 +27,7 @@ function postToWebhook(webhookObj, cb) {
   );
 }
 
-function postToWebhookStoreFailure(webhookObj) {
+function postToWebhookStoreFailure(webhookObj, cb) {
   postToWebhook(webhookObj, function(err) {
     if (err) {
       webhookObj.created = new Date().getTime();
@@ -39,10 +39,12 @@ function postToWebhookStoreFailure(webhookObj) {
         else {
           console.log('[Webhook Failed: ' + webhookObj.invoice_id + '] failed to notify ' + webhookObj.url);
         }
+        cb();
       });
     }
     else {
-        console.log('[Webhook Success: ' + webhookObj.invoice_id + '] successfully notified ' + webhookObj.url);
+      console.log('[Webhook Success: ' + webhookObj.invoice_id + '] successfully notified ' + webhookObj.url);
+      cb();
     }
   });
 }

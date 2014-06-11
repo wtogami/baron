@@ -9,7 +9,7 @@ var async = require('async');
 // The confirmations of our watched payments based on our stored
 // last known block. Remove in the future.
 
-function updateWatchedPayment(payment, transaction) {
+function updateWatchedPayment(payment, transaction, cb) {
   var receiveDetail = helper.getReceiveDetail(transaction.details);
   if (receiveDetail || (!receiveDetail && (transaction.confirmations === -1))) {
     transaction.address = receiveDetail ? receiveDetail.address : payment.address;
@@ -18,23 +18,29 @@ function updateWatchedPayment(payment, transaction) {
       if (err) {
         console.log(err);
       }
+      cb();
     });
   }
 }
 
-function checkPaymentExpiration(payment) {
+function checkPaymentExpiration(payment, cb) {
     var curTime = new Date().getTime();
     var expirationTime = Number(payment.created) + config.paymentValidForMinutes * 60 * 1000;
     if(payment.status === 'unpaid' && expirationTime < curTime) {
       payment.watched = false;
       db.insert(payment);
     }
+    cb();
 }
 
-var watchPaymentsJob = function () {
+var watchPaymentsJob = function (cb) {
   db.getWatchedPayments(function (err, paymentsArr) {
-    if (err || !paymentsArr) {
-      return err ? console.log(err) : null;
+    if (err) {
+      console.log(err);
+      return cb();
+    }
+    else if (!paymentsArr) {
+      return cb();
     }
     // Process all watched payments
     console.log('===========================');
@@ -51,17 +57,18 @@ var watchPaymentsJob = function () {
             console.log(err);
           }
           else {
-            updateWatchedPayment(payment, transaction.result);
+            updateWatchedPayment(payment, transaction.result, cb);
           }
         });
       }
       else { // payment not received
         unpaidCount++;
-        checkPaymentExpiration(payment);
+        checkPaymentExpiration(payment, cb);
       }
     });
     console.log('> Watched Paid Count: ' + paidCount);
     console.log('> Watched Unpaid Count: ' + unpaidCount);
+    cb();
   });
 };
 
@@ -70,7 +77,7 @@ var runWatchPaymentsJob = function () {
   async.whilst(
     function() { return true; },
     function(cb) {
-      setTimeout(function() { watchPaymentsJob(); cb(); }, config.updateWatchListInterval);
+      setTimeout(watchPaymentsJob, config.updateWatchListInterval, cb);
     },
     function(err) {
       console.log(err);

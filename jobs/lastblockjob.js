@@ -35,7 +35,7 @@ function getLastBlockHash(cb) {
   });
 }
 
-function processBlockHash(blockHashObj) {
+function processBlockHash(blockHashObj, cb) {
   var blockHash = blockHashObj.hash;
   bitcoinUtil.getBlock(blockHash, function(err, block) {
     if (err) {
@@ -43,14 +43,16 @@ function processBlockHash(blockHashObj) {
         console.log('Fatal Error: Blockhash ' + blockHash + ' is not known to bitcoind.  This should never happen.  Delete lastBlockHash from baron db if you wish to proceed.');
         process.exit(1);
       }
-      return console.log(err);
+      console.log(err);
+      return cb();
     }
     block = block.result;
     //console.log('> Block Valid: ' + validate.block(block));
     // Get List Since Block 
     bitcoinUtil.listSinceBlock(blockHash, function (err, info) {
       if (err) {
-        return console.log(err);
+        console.log(err);
+        return cb();
       }
       info = info.result;
       var transactions = [];
@@ -62,10 +64,8 @@ function processBlockHash(blockHashObj) {
       var lastBlockHash = info.lastblock;
       // If valid get transactions since last block (bitcore)
       if (validate.block(block)) {
-        async.eachSeries(transactions, function(transaction, cb) {
-          paymentUtil.updatePayment(transaction, function(err) {
-            cb(); // We dont care if update fails just run everthing in series until completion
-          });
+        async.eachSeries(transactions, function(transaction, cb2) {
+          paymentUtil.updatePayment(transaction, cb2);
         }, function(err) {
           if (!err) {
             if (blockHash !== lastBlockHash) {
@@ -73,6 +73,7 @@ function processBlockHash(blockHashObj) {
               db.insert(blockHashObj); // insert updated last block into db
             }
           }
+          cb();
         });
       }
       else { // If invalid update all transactions in block and step back
@@ -84,13 +85,13 @@ function processBlockHash(blockHashObj) {
         console.log('> REORG: Recursively processing previous block: ' + block.previousblockhash);
         // Recursively check previousHash
         blockHashObj.hash = block.previousblockhash;
-        processBlockHash(blockHashObj);
+        processBlockHash(blockHashObj, cb);
     }
     });
   });
 }
 
-var lastBlockJob = function() {
+var lastBlockJob = function(cb) {
   // Get Last Block, create it if baron isnt aware of one.
   getLastBlockHash(function(err, lastBlockHashObj) {
     if (err) {
@@ -102,16 +103,24 @@ var lastBlockJob = function() {
     console.log('===========================');
     console.log('Processing Last Block: ' + lastBlockHashObj.hash);
     console.log('===========================');
-    processBlockHash(lastBlockHashObj);
+    processBlockHash(lastBlockHashObj, cb);
   });
 };
+
+var blockQueue = async.queue(function (fn, cb) {
+  fn(cb);
+}, 1);
+
+blockQueue.drain = function() {
+  console.log('blockQueue: empty');
+}
 
 var runLastBlockJob = function () {
   // Periodically process new block
   async.whilst(
     function() { return true; },
     function(cb) {
-      setTimeout(function() { lastBlockJob(); cb(); }, config.lastBlockJobInterval);
+      setTimeout(lastBlockJob, config.lastBlockJobInterval, cb);
     },
     function(err) {
       console.log(err);
